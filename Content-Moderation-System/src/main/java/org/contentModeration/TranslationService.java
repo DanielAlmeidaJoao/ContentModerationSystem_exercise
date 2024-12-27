@@ -14,21 +14,14 @@ public class TranslationService {
     public String  TranslateToEnglish(String comment) {
         CompletableFuture<String> future = new CompletableFuture<>();
         try {
-            return future.completeOnTimeout(comment,getLatency(),TimeUnit.MILLISECONDS).get();
+            comment = future.completeOnTimeout(comment,getLatency(),TimeUnit.MILLISECONDS).get();
         } catch (Exception e) {
-            return comment;
         }
+        //System.out.println(comment);
+        return comment;
     }
     public int getLatency(){
-        return 200 + random.nextInt(400);
+        return 10 + random.nextInt(100);
     }
 
-    public static void main (String [] args){
-        ExecutorService executorService = Executors.newCachedThreadPool();
-        executorService.execute(()->{
-
-        });
-        //Executors.newSingleThreadExecutor();
-        //new ScheduledThreadPoolExecutor() //new ThreadPoolExecutor();
-    }
 }
