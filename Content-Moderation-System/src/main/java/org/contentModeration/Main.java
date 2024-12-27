@@ -1,22 +1,36 @@
 package org.contentModeration;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Base64;
 
 public class Main {
     public static void main(String[] args) throws Exception {
-        System.out.println("Hello world!");
-        String filePath = "path/to/your/file.csv";
+        int size = 1000 * 200;
+        File f = new File("./"+size+"_TEST_DATA.csv");
 
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                String[] values = line.split(","); // Split based on your delimiter
-                System.out.println(String.join(", ", values));
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+        MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+        FileWriter fileWriter = new FileWriter(f);
+        for (int i = 0; i < size; i++) {
+            String time = System.currentTimeMillis()+""+i;
+            byte [] hashed = messageDigest.digest((time.getBytes(StandardCharsets.UTF_8)));
+            fileWriter.write("user_name_"+i+","+toHex(hashed)+"\n");
         }
+        fileWriter.flush();
+        fileWriter.close();
+    }
+
+    public static String toHex(byte [] input){
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : input) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
+        }
+        return hexString.toString();
     }
 }

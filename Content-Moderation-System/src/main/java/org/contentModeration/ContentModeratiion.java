@@ -10,12 +10,15 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class ContentModeratiion {
 
     public static void main(String [] args) throws Exception{
-        ContentModeratiion contentModeratiion = new ContentModeratiion(50,"src/main/resources/MOCK_DATA.csv");
+        String path = "/home/tsunami/Documents/javaProjects/ContentModerationSystem_exercise/Content-Moderation-System/TEST_DATA.csv";
+        String path2 = "src/main/resources/MOCK_DATA.csv";
+        String path3 = "/home/tsunami/Documents/javaProjects/ContentModerationSystem_exercise/Content-Moderation-System/200000_TEST_DATA.csv";
+        ContentModeratiion contentModeratiion = new ContentModeratiion(10,path3);
         contentModeratiion.startThreadWorkers();
     }
 
     private Map<String,UserStats> commentsPerUser;
-    private Set<Integer> processedMessages;
+    //private Set<Integer> processedMessages;
     private int numberOfWorkers;
     private ScoringService scoringService;
     private TranslationService translationService;
@@ -25,7 +28,6 @@ public class ContentModeratiion {
 
     public ContentModeratiion(int numberOfWorkers, String fileName){
         commentsPerUser = new HashMap<>();
-        processedMessages = new HashSet<>();
         this.numberOfWorkers = numberOfWorkers;
         scoringService = new ScoringService();
         translationService = new TranslationService();
@@ -38,7 +40,7 @@ public class ContentModeratiion {
         long startTime = System.currentTimeMillis();
         final File file = new File(fileName);
         long chunkSize = file.length() / numberOfWorkers;
-        final ExecutorService executorService = Executors.newCachedThreadPool();
+        final ExecutorService executorService = Executors.newFixedThreadPool(100);  //Executors.newCachedThreadPool();
         BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
         for (int i = 0; i < numberOfWorkers; i++) {
             final long offset = i * chunkSize;
@@ -102,6 +104,7 @@ public class ContentModeratiion {
                             userStats.addScore(score);
                             userLock.writeLock().unlock();
                             localBlockingQueue.add(1);
+                            System.out.println(Thread.currentThread().getId());
                         });
                     });
                 }
