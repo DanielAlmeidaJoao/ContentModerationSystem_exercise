@@ -12,9 +12,9 @@ public class ScoringService {
     }
     public Float  WhatIsTheScore(String comment) {
         CompletableFuture<Float> future = new CompletableFuture<>();
-        float result = 0f;
+        float result;
         try {
-             result = future.completeOnTimeout(random.nextFloat(),getLatency(), TimeUnit.MILLISECONDS).get();
+             result = future.completeOnTimeout( (float) comment.length(),getLatency(), TimeUnit.MILLISECONDS).get();
         } catch (Exception e) {
             return 0f;
         }
