@@ -12,7 +12,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class ContentModeratiion {
 
     public static void main(String [] args) throws Exception{
-        ContentModeratiion contentModeratiion = new ContentModeratiion(4,"src/main/resources/input.csv");
+        ContentModeratiion contentModeratiion = new ContentModeratiion(4,"src/main/resources/MOCK_DATA.csv");
         contentModeratiion.startThreadWorkers();
     }
 
@@ -49,7 +49,6 @@ public class ContentModeratiion {
         int threadsFinished = 0;
         long threadId;
         while ( (threadId = blockingQueue.take()) > 0){
-            System.out.println("Read "+threadId);
             threadsFinished++;
             if (threadsFinished == numberOfWorkers){
                 break;
@@ -69,7 +68,6 @@ public class ContentModeratiion {
     }
     public void readFiles(final ExecutorService executorService, final String filePath,final long offset, final long endOffset, BlockingQueue<Long> waitingThreads, final int workerId) {
         System.out.println("Starting thread "+Thread.currentThread().getId());
-        System.out.println(offset +" "+endOffset);
 
         BlockingQueue<Integer> localBlockingQueue = new LinkedBlockingQueue<>();
 
@@ -77,22 +75,20 @@ public class ContentModeratiion {
             String line;
             if (offset > 0) {
                 reader.seek(offset-1);
-                line = reader.readLine();
-                if(line.charAt(line.length()-1) != '\n'){
-                    reader.readLine();
-                }
             }
 
             int totalProcessed = 0;
             while (reader.getFilePointer() < endOffset && (line = reader.readLine() ) != null ) {
                 String [] columns = line.replaceFirst(",","|").split("\\|");
+                if (columns.length != 2){
+                    continue;
+                }
                 final String userName = columns[0];
                 final String comment = columns[1];
                 writeLock.writeLock().lock();
                 boolean contains = processedMessages.add(comment.hashCode());
                 writeLock.writeLock().unlock();
                 if (contains){
-                    System.out.println(workerId+" ///// "+comment);
                     UserStats userStats = commentsPerUser.computeIfAbsent(userName, key -> new UserStats());
                     totalProcessed++;
 
@@ -105,14 +101,14 @@ public class ContentModeratiion {
                             localBlockingQueue.add(1);
                         });
                     });
+                } else {
+                    System.out.println("REPEATED "+userName);
                 }
             }
-            System.out.println(workerId + " 88 -- 99 "+totalProcessed);
             if (totalProcessed == 0){
                 waitingThreads.add(Thread.currentThread().getId());
             } else {
                 while (localBlockingQueue.take() > 0 ){
-                    System.out.println(workerId+" > 4444 id ");
                     totalProcessed--;
                     if (totalProcessed==0){
                         waitingThreads.add(Thread.currentThread().getId());
@@ -120,7 +116,6 @@ public class ContentModeratiion {
                     }
                 }
             }
-            System.out.println(workerId+" > END id ");
         } catch (Exception e) {
             e.printStackTrace();
         }
