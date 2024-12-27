@@ -1,7 +1,5 @@
 package org.contentModeration;
 
-import com.opencsv.CSVReader;
-
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -13,18 +11,17 @@ public class ContentModeratiion {
         String path = "/home/tsunami/Documents/javaProjects/ContentModerationSystem_exercise/Content-Moderation-System/TEST_DATA.csv";
         String path2 = "src/main/resources/MOCK_DATA.csv";
         String path3 = "/home/tsunami/Documents/javaProjects/ContentModerationSystem_exercise/Content-Moderation-System/200000_TEST_DATA.csv";
-        ContentModeratiion contentModeratiion = new ContentModeratiion(10,path3);
+        ContentModeratiion contentModeratiion = new ContentModeratiion(4,path2);
         contentModeratiion.startThreadWorkers();
     }
 
     private Map<String,UserStats> commentsPerUser;
-    //private Set<Integer> processedMessages;
     private int numberOfWorkers;
     private ScoringService scoringService;
     private TranslationService translationService;
     private String fileName;
-    private ReentrantReadWriteLock writeLock;
-    private ReentrantReadWriteLock userLock;
+    private ReentrantReadWriteLock editUserStatsLock;
+    private ReentrantReadWriteLock createUserLock;
 
     public ContentModeratiion(int numberOfWorkers, String fileName){
         commentsPerUser = new HashMap<>();
@@ -32,15 +29,15 @@ public class ContentModeratiion {
         scoringService = new ScoringService();
         translationService = new TranslationService();
         this.fileName = fileName;
-        writeLock = new ReentrantReadWriteLock();
-        userLock = new ReentrantReadWriteLock();
+        editUserStatsLock = new ReentrantReadWriteLock();
+        createUserLock = new ReentrantReadWriteLock();
 
     }
     public void startThreadWorkers() throws Exception{
         long startTime = System.currentTimeMillis();
         final File file = new File(fileName);
         long chunkSize = file.length() / numberOfWorkers;
-        final ExecutorService executorService = Executors.newFixedThreadPool(100);  //Executors.newCachedThreadPool();
+        final ExecutorService executorService = Executors.newCachedThreadPool(); //Executors.newFixedThreadPool(100);  //
         BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
         for (int i = 0; i < numberOfWorkers; i++) {
             final long offset = i * chunkSize;
@@ -65,7 +62,7 @@ public class ContentModeratiion {
                 fileWriter.write(String.format("%S,%d,%f\n", stringUserStatsEntry.getKey(), stats.getTotalMessages(), stats.getAverageScore()));
             }
             long endTime = System.currentTimeMillis();
-            System.out.println("Finished! Elapsed: "+(endTime - startTime)+"m... "+commentsPerUser.size());
+            System.out.println("Finished! Elapsed: "+(endTime - startTime)+" ... "+commentsPerUser.size());
             executorService.shutdownNow();
         }
     }
@@ -82,31 +79,31 @@ public class ContentModeratiion {
             while (localOffset < endOffset && (line = reader.readLine() ) != null ) {
                 localOffset += line.length();
                 String [] columns = line.replaceFirst(",","|").split("\\|");
-                if (columns.length != 2){
-                    continue;
-                }
-                final String userName = columns[0];
-                final String comment = columns[1];
+                if (columns.length == 2){
+                    final String userName = columns[0];
+                    final String comment = columns[1];
 
-                userLock.writeLock().lock();
-                UserStats userStats = commentsPerUser.computeIfAbsent(userName, key -> new UserStats());
-                boolean contains = userStats.messages.add(comment);
-                userLock.writeLock().unlock();
-                if (contains){
-                    totalProcessed++;
+                    createUserLock.writeLock().lock();
+                    UserStats userStats = commentsPerUser.computeIfAbsent(userName, key -> new UserStats());
+                    boolean contains = userStats.messages.add(comment);
+                    createUserLock.writeLock().unlock();
 
-                    executorService.execute(()->{
-                        String translatedText = translationService.TranslateToEnglish(comment);
+                    if (contains){
+                        totalProcessed++;
 
                         executorService.execute(()->{
-                            float score = scoringService.WhatIsTheScore(translatedText);
-                            userLock.writeLock().lock();
-                            userStats.addScore(score);
-                            userLock.writeLock().unlock();
-                            localBlockingQueue.add(1);
-                            System.out.println(Thread.currentThread().getId());
+                            String translatedText = translationService.TranslateToEnglish(comment);
+
+                            executorService.execute(()->{
+                                float score = scoringService.WhatIsTheScore(translatedText);
+                                editUserStatsLock.writeLock().lock();
+                                userStats.addScore(score);
+                                editUserStatsLock.writeLock().unlock();
+                                localBlockingQueue.add(1);
+                                //System.out.println(Thread.currentThread().getId());
+                            });
                         });
-                    });
+                    }
                 }
             }
 
