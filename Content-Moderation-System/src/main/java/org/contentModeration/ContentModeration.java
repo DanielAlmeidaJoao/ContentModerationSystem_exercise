@@ -5,16 +5,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class ContentModeratiion {
-
-    public static void main(String [] args) throws Exception{
-        String path = "/home/tsunami/Documents/javaProjects/ContentModerationSystem_exercise/Content-Moderation-System/TEST_DATA.csv";
-        String path2 = "src/main/resources/MOCK_DATA.csv";
-        String path3 = "/home/tsunami/Documents/javaProjects/ContentModerationSystem_exercise/Content-Moderation-System/200000_TEST_DATA.csv";
-        ContentModeratiion contentModeratiion = new ContentModeratiion(4,path2);
-        contentModeratiion.startThreadWorkers();
-    }
-
+public class ContentModeration {
+    public static int MAX_NUMBER_THREADS_PER_PROCESS = 30499;
     private Map<String,UserStats> commentsPerUser;
     private int numberOfWorkers;
     private ScoringService scoringService;
@@ -23,7 +15,7 @@ public class ContentModeratiion {
     private ReentrantReadWriteLock editUserStatsLock;
     private ReentrantReadWriteLock createUserLock;
 
-    public ContentModeratiion(int numberOfWorkers, String fileName){
+    public ContentModeration(int numberOfWorkers, String fileName){
         commentsPerUser = new HashMap<>();
         this.numberOfWorkers = numberOfWorkers;
         scoringService = new ScoringService();
@@ -37,7 +29,11 @@ public class ContentModeratiion {
         long startTime = System.currentTimeMillis();
         final File file = new File(fileName);
         long chunkSize = file.length() / numberOfWorkers;
-        final ExecutorService executorService = Executors.newCachedThreadPool(); //Executors.newFixedThreadPool(100);  //
+        final ExecutorService executorService =  new ThreadPoolExecutor(numberOfWorkers,MAX_NUMBER_THREADS_PER_PROCESS/300,
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<Runnable>());
+
+        //Executors.newFixedThreadPool(1000); //Executors.newCachedThreadPool();//
         BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
         for (int i = 0; i < numberOfWorkers; i++) {
             final long offset = i * chunkSize;

@@ -1,0 +1,13 @@
+java -cp target/Content-Moderation-System-1.0.0.jar Main
+
+For Threads: Check and increase the process thread limit:
+ulimit -u
+
+increace it temporarily
+ulimit -u <new_limit>
+
+Adjust Memory Settings
+java -Xmx4g -Xms2g -Xss512k -jar yourprogram.jar
+-Xmx: Maximum heap size (e.g., 4g for 4 GB).
+-Xms: Initial heap size (e.g., 2g for 2 GB).
+-Xss: Stack size per thread (e.g., 512k).

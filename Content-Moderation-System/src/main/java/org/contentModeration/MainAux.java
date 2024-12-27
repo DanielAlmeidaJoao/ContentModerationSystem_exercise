@@ -1,12 +1,10 @@
 package org.contentModeration;
 
 import java.io.*;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Base64;
 
-public class Main {
+public class MainAux {
     public static void main(String[] args) throws Exception {
         int size = 1000 * 200;
         File f = new File("./"+size+"_TEST_DATA.csv");
