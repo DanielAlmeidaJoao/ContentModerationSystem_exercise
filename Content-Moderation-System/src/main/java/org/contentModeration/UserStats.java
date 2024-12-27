@@ -13,6 +13,10 @@ public class UserStats {
         totalMessages++;
     }
 
+    public int getTotalMessages(){
+        return totalMessages;
+    }
+
     public float getAverageScore(){
         return sumScores / totalMessages;
     }

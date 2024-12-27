@@ -1,66 +1,98 @@
 package org.contentModeration;
 
+import com.opencsv.CSVReader;
+
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class ContentModeratiion {
 
-    Map<String,StringBuffer> commentsPerUser;
+    Map<String,UserStats> commentsPerUser;
     Set<Integer> processedMessages;
-    int numberOfThreads;
+    int numberOfWorkers;
     List<Thread> threadList;
     ScoringService scoringService;
     TranslationService translationService;
-    public ContentModeratiion(int numberOfThreads){
+    private String fileName;
+    public ContentModeratiion(int numberOfWorkers, String fileName){
         commentsPerUser = new ConcurrentHashMap<>();
         processedMessages = new HashSet<>();
-        this.numberOfThreads = numberOfThreads;
-        threadList = new ArrayList<>(numberOfThreads);
+        this.numberOfWorkers = numberOfWorkers;
+        threadList = new ArrayList<>(numberOfWorkers);
         scoringService = new ScoringService();
         translationService = new TranslationService();
-
+        this.fileName = fileName;
     }
-    public void startThreadWorkers(){
-        for (int i = 0; i < numberOfThreads; i++) {
-            Thread worker = new Thread(new Runnable() {
-                @Override
-                public void run() {
-
-                }
+    public void startThreadWorkers() throws Exception{
+        final File file = new File(fileName);
+        long chunkSize = file.length() / numberOfWorkers;
+        final ExecutorService executorService = Executors.newCachedThreadPool();
+        BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
+        for (int i = 0; i < numberOfWorkers; i++) {
+            final int index = i;
+            final long offset = i * chunkSize;
+            final long endOffSet = i == numberOfWorkers - 1 ? file.length() : offset + chunkSize;
+            executorService.submit(()->{
+                readFiles(executorService, fileName,offset,endOffSet, blockingQueue);
             });
-            threadList.add(worker);
-            worker.start();
+        }
+        int threadsFinished = 0;
+        while (blockingQueue.remove() > 0){
+            threadsFinished++;
+            if (threadsFinished == numberOfWorkers){
+                break;
+            }
+        }
+        File output = new File("resultado_"+System.currentTimeMillis()+".csv");
+        try (FileWriter fileWriter = new FileWriter(output)) {
+            for (Map.Entry<String, UserStats> stringUserStatsEntry : commentsPerUser.entrySet()) {
+                UserStats stats = stringUserStatsEntry.getValue();
+                fileWriter.write(String.format("%S,%d,%f\n", stringUserStatsEntry.getKey(), stats.getTotalMessages(), stats.getAverageScore()));
+            }
         }
     }
-    public void readFiles(int threadSequence, int offset, int len) throws FileNotFoundException {
-        ExecutorService executorService = Executors.newCachedThreadPool();
+    public void readFiles(final ExecutorService executorService, final String filePath,final long offset, final long endOffset, BlockingQueue<Long> waitingThreads) {
 
-        String filePath = "path/to/your/file.csv";
-
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+        try (RandomAccessFile reader = new RandomAccessFile(filePath,"r")) {
             String line;
-            br.skip(threadSequence*len);
-            while ((line = br.readLine()) != null) {
-                String[] values = line.split(","); // Split based on your delimiter
-                String userName = values[0];
-                String comment = values[1];
-                if (processedMessages.add(comment.hashCode())){
-                    StringBuffer stringBuffer = commentsPerUser.computeIfAbsent(userName, key -> new StringBuffer());
-                    stringBuffer.append("\n").append(comment);
-                    executorService.execute(()->{
-                        final String user = userName;
-                        String translatedText = translationService.TranslateToEnglish(comment);
-                        executorService.execute(()->{
-                            float score = scoringService.WhatIsTheScore(translatedText);
-
-                        });
-                    });
+            if (offset > 0) {
+                reader.seek(offset-1);
+                line = reader.readLine();
+                if(line.charAt(line.length()-1) != '\n'){
+                    reader.readLine();
                 }
             }
-        } catch (IOException e) {
+
+            AtomicLong bytesToScored = new AtomicLong(endOffset-offset);
+
+            while (reader.getFilePointer() < endOffset && (line = reader.readLine() ) != null ) {
+                String [] columns = line.split(",");
+                final String userName = columns[0];
+                final String comment = columns[1];
+                if (processedMessages.add(comment.hashCode())){
+                    UserStats userStats = commentsPerUser.computeIfAbsent(userName, key -> new UserStats());
+
+                    String finalLine = line;
+                    executorService.execute(()->{
+                        String translatedText = translationService.TranslateToEnglish(comment);
+
+                        executorService.execute(()->{
+                            float score = scoringService.WhatIsTheScore(translatedText);
+                            userStats.addScore(score);
+
+                            if ( bytesToScored.addAndGet(-finalLine.length()) == 0){
+                                waitingThreads.add(Thread.currentThread().getId());
+                            }
+                        });
+                    });
+                } else {
+                    bytesToScored.addAndGet(-line.length());
+                }
+            }
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
