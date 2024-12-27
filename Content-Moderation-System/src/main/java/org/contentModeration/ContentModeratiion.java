@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ContentModeratiion {
 
@@ -21,6 +22,7 @@ public class ContentModeratiion {
     private ScoringService scoringService;
     private TranslationService translationService;
     private String fileName;
+    private ReentrantReadWriteLock writeLock;
     public ContentModeratiion(int numberOfWorkers, String fileName){
         commentsPerUser = new ConcurrentHashMap<>();
         processedMessages = new HashSet<>();
@@ -28,18 +30,31 @@ public class ContentModeratiion {
         scoringService = new ScoringService();
         translationService = new TranslationService();
         this.fileName = fileName;
+        writeLock = new ReentrantReadWriteLock();
     }
     public void startThreadWorkers() throws Exception{
         long startTime = System.currentTimeMillis();
         final File file = new File(fileName);
+        long chunkSize = file.length() / numberOfWorkers;
         final ExecutorService executorService = Executors.newCachedThreadPool();
-        BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>(1);
-        executorService.submit(()->{
-            readFiles(executorService, fileName, blockingQueue,1);
-        });
-
-        blockingQueue.take();
-
+        BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
+        for (int i = 0; i < numberOfWorkers; i++) {
+            final long offset = i * chunkSize;
+            final long endOffSet = i == numberOfWorkers - 1 ? file.length() : offset + chunkSize;
+            final int workerId = i;
+            executorService.submit(()->{
+                readFiles(executorService, fileName,offset,endOffSet, blockingQueue, workerId);
+            });
+        }
+        int threadsFinished = 0;
+        long threadId;
+        while ( (threadId = blockingQueue.take()) > 0){
+            System.out.println("Read "+threadId);
+            threadsFinished++;
+            if (threadsFinished == numberOfWorkers){
+                break;
+            }
+        }
         System.out.println("Finished");
         File output = new File("resultado_"+System.currentTimeMillis()+".csv");
         try (FileWriter fileWriter = new FileWriter(output)) {
@@ -52,20 +67,32 @@ public class ContentModeratiion {
             executorService.shutdownNow();
         }
     }
-    public void readFiles(final ExecutorService executorService, final String filePath, BlockingQueue<Long> waitingThreads, final int workerId) {
+    public void readFiles(final ExecutorService executorService, final String filePath,final long offset, final long endOffset, BlockingQueue<Long> waitingThreads, final int workerId) {
         System.out.println("Starting thread "+Thread.currentThread().getId());
+        System.out.println(offset +" "+endOffset);
 
         BlockingQueue<Integer> localBlockingQueue = new LinkedBlockingQueue<>();
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+        try (RandomAccessFile reader = new RandomAccessFile(filePath,"r")) {
             String line;
+            if (offset > 0) {
+                reader.seek(offset-1);
+                line = reader.readLine();
+                if(line.charAt(line.length()-1) != '\n'){
+                    reader.readLine();
+                }
+            }
+
             int totalProcessed = 0;
-            while ((line = reader.readLine() ) != null ) {
-                String [] columns = line.split(",");
+            while (reader.getFilePointer() < endOffset && (line = reader.readLine() ) != null ) {
+                String [] columns = line.replaceFirst(",","|").split("\\|");
                 final String userName = columns[0];
                 final String comment = columns[1];
-                if (processedMessages.add(comment.hashCode())){
-                    System.out.println(workerId+" ||||| "+comment);
+                writeLock.writeLock().lock();
+                boolean contains = processedMessages.add(comment.hashCode());
+                writeLock.writeLock().unlock();
+                if (contains){
+                    System.out.println(workerId+" ///// "+comment);
                     UserStats userStats = commentsPerUser.computeIfAbsent(userName, key -> new UserStats());
                     totalProcessed++;
 
