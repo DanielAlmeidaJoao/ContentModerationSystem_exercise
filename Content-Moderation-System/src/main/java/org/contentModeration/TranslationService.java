@@ -21,7 +21,7 @@ public class TranslationService {
         return comment;
     }
     public int getLatency(){
-        return 10 + random.nextInt(100);
+        return 200 + random.nextInt(800);
     }
 
 }

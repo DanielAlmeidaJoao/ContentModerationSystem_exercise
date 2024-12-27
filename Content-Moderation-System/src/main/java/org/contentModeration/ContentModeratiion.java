@@ -78,7 +78,9 @@ public class ContentModeratiion {
             }
 
             int totalProcessed = 0;
-            while (reader.getFilePointer() < endOffset && (line = reader.readLine() ) != null ) {
+            long localOffset = offset;
+            while (localOffset < endOffset && (line = reader.readLine() ) != null ) {
+                localOffset += line.length();
                 String [] columns = line.replaceFirst(",","|").split("\\|");
                 if (columns.length != 2){
                     continue;
@@ -101,10 +103,9 @@ public class ContentModeratiion {
                             localBlockingQueue.add(1);
                         });
                     });
-                } else {
-                    System.out.println("REPEATED "+userName);
                 }
             }
+            System.out.println("Lines read "+totalProcessed);
             if (totalProcessed == 0){
                 waitingThreads.add(Thread.currentThread().getId());
             } else {
