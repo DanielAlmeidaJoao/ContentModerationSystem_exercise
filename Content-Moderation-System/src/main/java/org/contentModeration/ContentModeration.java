@@ -1,5 +1,8 @@
 package org.contentModeration;
 
+import com.opencsv.CSVParser;
+import com.opencsv.CSVReader;
+
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -39,18 +42,32 @@ public class ContentModeration {
     }
     public void startThreadWorkers() throws Exception{
         long startTime = System.currentTimeMillis();
-        final File file = new File(inputPath);
-        long chunkSize = file.length() / numberOfWorkers;
+        RandomAccessFile randomAccessFile = new RandomAccessFile(inputPath,"r");
+
+        long chunkSize = randomAccessFile.length() / numberOfWorkers;
         final ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
 
         BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
+        long nextStart = 0;
         for (int i = 0; i < numberOfWorkers; i++) {
-            final long offset = i * chunkSize;
-            final long endOffSet = i == numberOfWorkers - 1 ? file.length() : offset + chunkSize;
+            long currentStart = nextStart;
+            long endOffSet;
+            if (i == numberOfWorkers - 1){
+                endOffSet =   randomAccessFile.length();
+            } else {
+                long pseudoEndOffSet = currentStart + chunkSize;
+                randomAccessFile.seek(pseudoEndOffSet);
+                randomAccessFile.readLine();
+                endOffSet = randomAccessFile.getFilePointer();
+            }
+
+            nextStart = endOffSet;
+
             executorService.submit(()->{
-                readFiles(executorService, inputPath,offset,endOffSet, blockingQueue);
+                readFiles(executorService,currentStart,endOffSet, blockingQueue);
             });
         }
+        randomAccessFile.close();
         int threadsFinished = 0;
         while ( blockingQueue.take() > 0){
             threadsFinished++;
@@ -70,14 +87,12 @@ public class ContentModeration {
             executorService.shutdownNow();
         }
     }
-    public void readFiles(final ExecutorService executorService, final String filePath,final long offset, final long endOffset, BlockingQueue<Long> waitingThreads) {
+    public void readFiles(final ExecutorService executorService,final long offset, final long endOffset, BlockingQueue<Long> waitingThreads) {
         BlockingQueue<Integer> localBlockingQueue = new LinkedBlockingQueue<>();
 
-        try (RandomAccessFile reader = new RandomAccessFile(filePath,"r")) {
+        try (RandomAccessFile reader = new RandomAccessFile(inputPath,"r")) {
             String line;
-            if (offset > 0) {
-                reader.seek(offset-1);
-            }
+            reader.seek(offset);
             int totalProcessed = 0;
             long localOffset = offset;
             while (localOffset < endOffset && (line = reader.readLine() ) != null ) {

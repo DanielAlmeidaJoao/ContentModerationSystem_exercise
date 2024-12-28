@@ -1,36 +1,67 @@
 package org.contentModeration;
 
-import com.opencsv.bean.util.OpencsvUtils;
-import org.apache.commons.lang3.tuple.Pair;
-import org.apache.commons.lang3.tuple.Triple;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVWriter;
 import org.junit.jupiter.api.Test;
-import org.mockito.stubbing.Answer;
 
 import java.io.*;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class ContentModerationTest {
+    // PROGRAM EXECUTION
+    TranslationService translationService = mockTranslationService();
+    ScoringService scoringService = mockScoringService();
 
     @Test
-    void verifyModeratedCSV() throws Exception {
-        boolean deleteFiles = false;
+    void success_verifyModeratedCSV() throws Exception {
+        boolean deleteFiles = true;
 
+        // INPUT DATA GENERATION
+        int numberOfUsers = 100;
+        int numberOfMessages = 50;
+
+        Map<String,TestUserStats> users = createUsers(numberOfUsers);
+
+        String inputTestFile = "./JUNIT_INPUT_"+System.currentTimeMillis() +"_.csv";
+        String moderatedTestFile = "./JUNIT_OUTPUT_"+System.currentTimeMillis() +"_.csv";
+
+        generateComments(users,numberOfMessages,inputTestFile);
+
+        final int numberOfWorkers = 4;
+        final int numberOfThreads = 10;
+
+        ContentModeration contentModeration = new ContentModeration(translationService,scoringService,numberOfWorkers,numberOfThreads,inputTestFile,moderatedTestFile);
+        contentModeration.startThreadWorkers();
+
+        //VALIDATION
+        verifyOutputFileHasExpectedResults(users,moderatedTestFile);
+
+        //CLEAN UP
+        deleteFiles(deleteFiles,inputTestFile,moderatedTestFile);
+    }
+
+    //@Test
+    void fail_one_user_with_wrong_number_of_message() throws Exception {
+        boolean deleteFiles = true;
+
+        // INPUT DATA GENERATION
         int numberOfUsers = 10;
         int numberOfMessages = 20;
 
         Map<String,TestUserStats> users = createUsers(numberOfUsers);
+
+        //WILL FAIL BECAUSE OF THIS LINE!
+        users.get(getUserId(0)).addScore(9.72f);
+
         String inputTestFile = "./JUNIT_INPUT_"+System.currentTimeMillis() +"_.csv";
         String moderatedTestFile = "./JUNIT_OUTPUT_"+System.currentTimeMillis() +"_.csv";
-        generateComments(users,numberOfMessages,inputTestFile);
 
-        TranslationService translationService =mockTranslationService();
-        ScoringService scoringService = mockScoringService();
+        generateComments(users,numberOfMessages,inputTestFile);
 
         final int numberOfWorkers = 2;
         final int numberOfThreads = 10;
@@ -38,18 +69,44 @@ class ContentModerationTest {
         ContentModeration contentModeration = new ContentModeration(translationService,scoringService,numberOfWorkers,numberOfThreads,inputTestFile,moderatedTestFile);
         contentModeration.startThreadWorkers();
 
-        //TEST
+        //VALIDATION
+        verifyOutputFileHasExpectedResults(users,moderatedTestFile);
+
+        //CLEAN UP
+        deleteFiles(deleteFiles,inputTestFile,moderatedTestFile);
+    }
+
+    private void deleteFiles(boolean deleteFiles, String inputTestFile, String moderatedTestFile){
+        if (deleteFiles){
+            File finput = new File(inputTestFile);
+            finput.delete();
+            File fouput = new File(moderatedTestFile);
+            fouput.delete();
+        }
+    }
+    private void verifyOutputFileHasExpectedResults(Map<String,TestUserStats> users, String moderatedTestFile){
+        // RESULT VERIFICATION
         int totalLinesRead = 0;
-        try (BufferedReader reader = new BufferedReader(new FileReader(moderatedTestFile))) {
-            String line;
-            while ( (line = reader.readLine()) != null){
+        try (CSVReader reader = new CSVReader(new FileReader(moderatedTestFile))) {
+            String [] line;
+            while ( (line = reader.readNext()) != null){
                 totalLinesRead++;
 
-                String [] elements = line.split(",");
-                String user = elements[0];
-                int totalMessages = Integer.parseInt(elements[1]);
-                float score = Float.parseFloat(elements[2]);
+                //String [] elements = line.split(",");
+                String user = line[0];
+
+                int totalMessages = Integer.parseInt(line[1]);
+                float score = Float.parseFloat(line[2]);
                 TestUserStats stats = users.get(user);
+                if (stats == null){
+                    System.out.println();
+                }
+                if (stats.getAverageScore() != score){
+                    System.out.println("OLE OLA");
+                }
+                if (stats.getTotalMessages() != totalMessages){
+                    System.out.println();
+                }
                 assert stats.getTotalMessages() == totalMessages;
                 assert stats.getAverageScore() == score;
             }
@@ -57,13 +114,13 @@ class ContentModerationTest {
             e.printStackTrace();
         }
 
-        assert users.size() == totalLinesRead;
-        if (deleteFiles){
-            File finput = new File(inputTestFile);
-            finput.delete();
-            File fouput = new File(moderatedTestFile);
-            fouput.delete();
+        int usersWithMessages = 0;
+        for (Map.Entry<String, TestUserStats> stringTestUserStatsEntry : users.entrySet()) {
+            if ( stringTestUserStatsEntry.getValue().getTotalMessages() > 0 ){
+                usersWithMessages++;
+            }
         }
+        assert usersWithMessages == totalLinesRead;
     }
 
     private String getUserId(int i){
