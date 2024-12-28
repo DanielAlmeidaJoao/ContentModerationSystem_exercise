@@ -19,18 +19,28 @@ class ContentModerationTest {
 
     @Test
     void verifyModeratedCSV() throws Exception {
-        String filePath = "";
+        boolean deleteFiles = false;
 
         int numberOfUsers = 10;
         int numberOfMessages = 20;
 
-        Map<String,TestUserStats> users = createUsers(10);
+        Map<String,TestUserStats> users = createUsers(numberOfUsers);
         String inputTestFile = "./JUNIT_INPUT_"+System.currentTimeMillis() +"_.csv";
         String moderatedTestFile = "./JUNIT_OUTPUT_"+System.currentTimeMillis() +"_.csv";
-
         generateComments(users,numberOfMessages,inputTestFile);
+
+        TranslationService translationService =mockTranslationService();
+        ScoringService scoringService = mockScoringService();
+
+        final int numberOfWorkers = 2;
+        final int numberOfThreads = 10;
+
+        ContentModeration contentModeration = new ContentModeration(translationService,scoringService,numberOfWorkers,numberOfThreads,inputTestFile,moderatedTestFile);
+        contentModeration.startThreadWorkers();
+
+        //TEST
         int totalLinesRead = 0;
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(moderatedTestFile))) {
             String line;
             while ( (line = reader.readLine()) != null){
                 totalLinesRead++;
@@ -46,7 +56,14 @@ class ContentModerationTest {
         } catch (Exception e){
             e.printStackTrace();
         }
+
         assert users.size() == totalLinesRead;
+        if (deleteFiles){
+            File finput = new File(inputTestFile);
+            finput.delete();
+            File fouput = new File(moderatedTestFile);
+            fouput.delete();
+        }
     }
 
     private String getUserId(int i){
@@ -82,15 +99,20 @@ class ContentModerationTest {
         fileWriter.close();
     }
 
-
-    private void generateTestData(int numberOfUsers, int numberOfMessages) throws Exception{
-        /**
-        ScoringService scoringService = mock(ScoringService.class);
-        when(scoringService.WhatIsTheScore(anyString())).then(invocationOnMock -> {
-            String message = invocationOnMock.getArgument(0);
+    private ScoringService mockScoringService(){
+         ScoringService scoringService = mock(ScoringService.class);
+         when(scoringService.WhatIsTheScore(anyString())).then(invocationOnMock -> {
+         String message = invocationOnMock.getArgument(0);
             return getTestScore(message);
-        });
-        **/
+         });
+         return scoringService;
+    }
 
+    private TranslationService mockTranslationService(){
+        TranslationService translationService = mock(TranslationService.class);
+        when(translationService.TranslateToEnglish(anyString())).then(invocationOnMock -> {
+            return invocationOnMock.getArgument(0);
+        });
+        return translationService;
     }
 }

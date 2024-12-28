@@ -63,7 +63,7 @@ public class ContentModeration {
         try (FileWriter fileWriter = new FileWriter(output)) {
             for (Map.Entry<String, UserStats> stringUserStatsEntry : commentsPerUser.entrySet()) {
                 UserStats stats = stringUserStatsEntry.getValue();
-                fileWriter.write(String.format("%S,%d,%f\n", stringUserStatsEntry.getKey(), stats.getTotalMessages(), stats.getAverageScore()));
+                fileWriter.write(String.format("%s,%d,%f\n", stringUserStatsEntry.getKey(), stats.getTotalMessages(), stats.getAverageScore()));
             }
             long endTime = System.currentTimeMillis();
             System.out.println("Finished! Elapsed: "+(endTime - startTime)+" ... "+commentsPerUser.size());
