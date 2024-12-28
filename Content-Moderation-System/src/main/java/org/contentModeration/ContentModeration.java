@@ -29,11 +29,8 @@ public class ContentModeration {
         long startTime = System.currentTimeMillis();
         final File file = new File(fileName);
         long chunkSize = file.length() / numberOfWorkers;
-        final ExecutorService executorService =  new ThreadPoolExecutor(numberOfWorkers,MAX_NUMBER_THREADS_PER_PROCESS/300,
-                60L, TimeUnit.SECONDS,
-                new SynchronousQueue<Runnable>());
+        final ExecutorService executorService = Executors.newFixedThreadPool(9000);
 
-        //Executors.newFixedThreadPool(1000); //Executors.newCachedThreadPool();//
         BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
         for (int i = 0; i < numberOfWorkers; i++) {
             final long offset = i * chunkSize;
@@ -49,9 +46,7 @@ public class ContentModeration {
                 break;
             }
         }
-        System.out.println("Finished");
         File output = new File("resultado_"+System.currentTimeMillis()+".csv");
-
         try (FileWriter fileWriter = new FileWriter(output)) {
             for (Map.Entry<String, UserStats> stringUserStatsEntry : commentsPerUser.entrySet()) {
                 UserStats stats = stringUserStatsEntry.getValue();
@@ -81,10 +76,10 @@ public class ContentModeration {
 
                     createUserLock.writeLock().lock();
                     UserStats userStats = commentsPerUser.computeIfAbsent(userName, key -> new UserStats());
-                    boolean contains = userStats.messages.add(comment);
+                    boolean unprocessedComment = userStats.messages.add(comment);
                     createUserLock.writeLock().unlock();
 
-                    if (contains){
+                    if (unprocessedComment){
                         totalProcessed++;
 
                         executorService.execute(()->{
@@ -96,7 +91,6 @@ public class ContentModeration {
                                 userStats.addScore(score);
                                 editUserStatsLock.writeLock().unlock();
                                 localBlockingQueue.add(1);
-                                //System.out.println(Thread.currentThread().getId());
                             });
                         });
                     }
