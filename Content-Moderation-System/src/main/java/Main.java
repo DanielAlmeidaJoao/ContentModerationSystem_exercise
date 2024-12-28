@@ -2,10 +2,18 @@ import org.contentModeration.ContentModeration;
 
 public class Main {
     public static void main(String [] args) throws Exception{
+        int numberOfWorkers = 4;
+        int numberOfThreads = 9000;
+        if (args.length > 0){
+            numberOfWorkers = Integer.parseInt(args[0]);
+        }
+        if (args.length > 0){
+            numberOfThreads = Integer.parseInt(args[1]);
+        }
         String path = "./TEST_DATA.csv";
         String path2 = "./src/main/resources/MOCK_DATA.csv";
         String path3 = "./200000_TEST_DATA.csv";
-        ContentModeration contentModeration = new ContentModeration(4,path);
+        ContentModeration contentModeration = new ContentModeration(numberOfWorkers,numberOfThreads,path);
         contentModeration.startThreadWorkers();
     }
 }

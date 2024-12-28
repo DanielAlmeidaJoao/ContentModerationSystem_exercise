@@ -8,35 +8,47 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class ContentModeration {
     public static int MAX_NUMBER_THREADS_PER_PROCESS = 30499;
     private Map<String,UserStats> commentsPerUser;
-    private int numberOfWorkers;
-    private ScoringService scoringService;
-    private TranslationService translationService;
-    private String fileName;
     private ReentrantReadWriteLock editUserStatsLock;
     private ReentrantReadWriteLock createUserLock;
 
-    public ContentModeration(int numberOfWorkers, String fileName){
+    private ScoringService scoringService;
+    private TranslationService translationService;
+
+    private String inputPath;
+    private String outputPath;
+
+    private int numberOfWorkers;
+    private int numberOfThreads;
+
+
+
+    public ContentModeration(TranslationService translationService, ScoringService scoringService, int numberOfWorkers, int numberOfThreads, String inputPath, String outputPath){
         commentsPerUser = new HashMap<>();
-        this.numberOfWorkers = numberOfWorkers;
-        scoringService = new ScoringService();
-        translationService = new TranslationService();
-        this.fileName = fileName;
         editUserStatsLock = new ReentrantReadWriteLock();
         createUserLock = new ReentrantReadWriteLock();
+
+        this.scoringService = scoringService;
+        this.translationService = translationService;
+
+        this.numberOfWorkers = numberOfWorkers;
+        this.numberOfThreads = numberOfThreads;
+
+        this.inputPath = inputPath;
+        this.outputPath = outputPath;
 
     }
     public void startThreadWorkers() throws Exception{
         long startTime = System.currentTimeMillis();
-        final File file = new File(fileName);
+        final File file = new File(inputPath);
         long chunkSize = file.length() / numberOfWorkers;
-        final ExecutorService executorService = Executors.newFixedThreadPool(9000);
+        final ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
 
         BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
         for (int i = 0; i < numberOfWorkers; i++) {
             final long offset = i * chunkSize;
             final long endOffSet = i == numberOfWorkers - 1 ? file.length() : offset + chunkSize;
             executorService.submit(()->{
-                readFiles(executorService, fileName,offset,endOffSet, blockingQueue);
+                readFiles(executorService, inputPath,offset,endOffSet, blockingQueue);
             });
         }
         int threadsFinished = 0;
@@ -46,7 +58,8 @@ public class ContentModeration {
                 break;
             }
         }
-        File output = new File("resultado_"+System.currentTimeMillis()+".csv");
+
+        File output = new File(outputPath);
         try (FileWriter fileWriter = new FileWriter(output)) {
             for (Map.Entry<String, UserStats> stringUserStatsEntry : commentsPerUser.entrySet()) {
                 UserStats stats = stringUserStatsEntry.getValue();
