@@ -16,21 +16,6 @@ public class Utils {
         }
     }
 
-
-    public static void main(String[] args) throws Exception {
-        int size = 1000 * 200;
-        File f = new File("./"+size+"_TEST_DATA.csv");
-
-        FileWriter fileWriter = new FileWriter(f);
-
-        for (int i = 0; i < size; i++) {
-            String message = System.currentTimeMillis()+""+i;
-            fileWriter.write("user_name_"+i+","+ encryptThenHex(message)+"\n");
-        }
-        fileWriter.flush();
-        fileWriter.close();
-    }
-
     public static String encryptThenHex(String message){
         byte [] hashed = messageDigest.digest((message.getBytes(StandardCharsets.UTF_8)));
         return toHex(hashed);
