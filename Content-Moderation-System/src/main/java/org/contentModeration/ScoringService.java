@@ -22,6 +22,6 @@ public class ScoringService {
         return result;
     }
     public int getLatency(){
-        return 200 + random.nextInt(800);
+        return 50 + random.nextInt(150);
     }
 }

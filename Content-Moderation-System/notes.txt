@@ -3,6 +3,8 @@ java -Xmx4g -Xms2g -Xss512k -cp target/Content-Moderation-System-1.0.0.jar Main
 
 java -Xmx4g -Xms2g -Xss136k -cp target/Content-Moderation-System-1.0.0.jar Main
 
+mvn clean compile package
+
 For Threads: Check and increase the process thread limit:
 ulimit -u
 
