@@ -36,6 +36,7 @@ class TestContentModeration {
 
             RandomAccessFile randomAccessFile = new RandomAccessFile(file,"r");
 
+            //GET second line from any offset from first line
             for (int i = 0; i < line1.length(); i++) {
                 long currentOffset = randomAccessFile.getFilePointer();
                 long offset = ContentModeration.getBeginningOfNextLineOffset(i,randomAccessFile);
@@ -48,7 +49,9 @@ class TestContentModeration {
                 assert lineRead.equals(line2);
             }
 
-            for (int i = line1.length()+1; i <(line1.length()+ line2.length()); i++) {
+            //GET third line from any offset from second line
+            final int secondLineIndexEnd = line1.length()+ line2.length();
+            for (int i = line1.length()+1; i <secondLineIndexEnd; i++) {
                 long currentOffset = randomAccessFile.getFilePointer();
                 long offset = ContentModeration.getBeginningOfNextLineOffset(i,randomAccessFile);
                 assert currentOffset == randomAccessFile.getFilePointer();
@@ -58,8 +61,11 @@ class TestContentModeration {
 
                 assert lineRead.equals(line3);
             }
+
+            //GET fourth line from any offset from third line
             // 2 = the line breaks for line1 and line2
-            for (int i = (line1.length() + line2.length()+2); i < randomAccessFile.length(); i++) {
+            final int thirdLineStart = line1.length() + line2.length()+2;
+            for (int i = thirdLineStart; i < randomAccessFile.length(); i++) {
                 long currentOffset = randomAccessFile.getFilePointer();
                 long offset = ContentModeration.getBeginningOfNextLineOffset(i,randomAccessFile);
                 assert currentOffset == randomAccessFile.getFilePointer();
@@ -69,6 +75,10 @@ class TestContentModeration {
 
                 assert lineRead == null;
             }
+
+            assert !line1.isEmpty();
+            assert  line1.length()+1 < secondLineIndexEnd;
+            assert thirdLineStart < randomAccessFile.length();
 
             randomAccessFile.close();
 
@@ -90,9 +100,6 @@ class TestContentModeration {
         boolean deleteFiles = true;
 
         // INPUT DATA GENERATION
-        //int numberOfUsers = 100;
-        //int numberOfMessages = 50;
-
         Map<String, TestUserStats> users = createUsers(numberOfUsers);
 
         String inputTestFile = "./JUNIT_INPUT_"+System.currentTimeMillis() +"_.csv";
@@ -101,8 +108,6 @@ class TestContentModeration {
         generateCommentsAndWriteToFile(users,numberOfMessages,inputTestFile);
 
         //Execute program
-        //final int numberOfWorkers = 4;
-        //final int numberOfThreads = 10;
         ContentModeration contentModeration = new ContentModeration(translationService,scoringService,numberOfWorkers,numberOfThreads,inputTestFile,moderatedTestFile);
         contentModeration.startThreadWorkers();
 
@@ -112,7 +117,6 @@ class TestContentModeration {
         //CLEAN UP
         deleteFiles(deleteFiles,inputTestFile);
         deleteFiles(deleteFiles,moderatedTestFile);
-
     }
 
     private void deleteFiles(boolean deleteFiles, String inputTestFile){
@@ -129,21 +133,12 @@ class TestContentModeration {
             while ( (line = reader.readNext()) != null){
                 totalLinesRead++;
 
-                //String [] elements = line.split(",");
                 String user = line[0];
 
                 int totalMessages = Integer.parseInt(line[1]);
                 float score = Float.parseFloat(line[2]);
                 TestUserStats stats = users.get(user);
-                if (stats == null){
-                    System.out.println();
-                }
-                if (stats.getAverageScore() != score){
-                    System.out.println("OLE OLA");
-                }
-                if (stats.getTotalMessages() != totalMessages){
-                    System.out.println();
-                }
+
                 assert stats.getTotalMessages() == totalMessages;
                 assert stats.getAverageScore() == score;
             }
@@ -194,19 +189,19 @@ class TestContentModeration {
     }
 
     private ScoringService mockScoringService(){
-         ScoringService scoringService = mock(ScoringService.class);
-         when(scoringService.WhatIsTheScore(anyString())).then(invocationOnMock -> {
+         ScoringService mockScoringService = mock(ScoringService.class);
+         when(mockScoringService.WhatIsTheScore(anyString())).then(invocationOnMock -> {
          String message = invocationOnMock.getArgument(0);
             return getTestScore(message);
          });
-         return scoringService;
+         return mockScoringService;
     }
 
     private TranslationService mockTranslationService(){
-        TranslationService translationService = mock(TranslationService.class);
-        when(translationService.TranslateToEnglish(anyString())).then(invocationOnMock -> {
+        TranslationService mockTranslationService = mock(TranslationService.class);
+        when(mockTranslationService.TranslateToEnglish(anyString())).then(invocationOnMock -> {
             return invocationOnMock.getArgument(0);
         });
-        return translationService;
+        return mockTranslationService;
     }
 }
