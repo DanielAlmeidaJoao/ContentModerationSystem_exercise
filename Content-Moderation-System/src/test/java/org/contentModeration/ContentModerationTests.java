@@ -111,7 +111,7 @@ class ContentModerationTests {
 
         //Execute program
         ContentModeration contentModeration = new ContentModeration(translationService, scoringService, numberOfWorkers, numberOfThreads, inputTestFile, moderatedTestFile);
-        contentModeration.startThreadWorkers();
+        contentModeration.executeContentModeration();
 
         //VALIDATION
         verifyOutputFileHasExpectedResults(users, moderatedTestFile);

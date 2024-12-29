@@ -48,12 +48,20 @@ public class ContentModeration {
 
     }
 
-    public void startThreadWorkers() throws Exception {
+    public void executeContentModeration() throws Exception {
         long startTime = System.currentTimeMillis();
 
         final ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
         BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
 
+        readCsvConcurrentlyAndCalculateScores(executorService, blockingQueue);
+        waitForScoresToBeCalculated(blockingQueue);
+        writeFinalResultsToFile(startTime);
+
+        executorService.shutdownNow();
+    }
+
+    private void readCsvConcurrentlyAndCalculateScores(ExecutorService executorService, BlockingQueue<Long> blockingQueue) throws Exception {
         RandomAccessFile randomAccessFile = new RandomAccessFile(inputPath, "r");
         long chunkSize = randomAccessFile.length() / numberOfWorkers;
         long nextStart = 0;
@@ -74,11 +82,6 @@ public class ContentModeration {
             );
         }
         randomAccessFile.close();
-
-        waitForScoresToBeCalculated(blockingQueue);
-        writeFinalResultsToFile(startTime);
-        executorService.shutdownNow();
-
     }
 
     private void readCsvAndCalculateScores(final ExecutorService executorService, final long offset, final long endOffset, BlockingQueue<Long> waitingThreads) {

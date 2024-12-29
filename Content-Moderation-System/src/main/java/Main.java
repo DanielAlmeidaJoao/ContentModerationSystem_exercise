@@ -19,7 +19,7 @@ public class Main {
         String outputPath = "./OUTPUT_"+System.currentTimeMillis()+".csv";
         ContentModeration contentModeration = new ContentModeration(translationService,scoringService,numberOfWorkers,numberOfThreads,filePath,outputPath);
 
-        contentModeration.startThreadWorkers();
+        contentModeration.executeContentModeration();
         System.out.println("Final Result is at: "+outputPath);
     }
 }
