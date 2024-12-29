@@ -1,12 +1,8 @@
-package org.contentModeration;
-
-import java.util.HashSet;
-import java.util.Set;
+package org.contentModeration.testUtils;
 
 public class TestUserStats {
     private int totalMessages;
     private float sumScores;
-    Set<String> messages;
 
     public TestUserStats(){
         totalMessages = 0;

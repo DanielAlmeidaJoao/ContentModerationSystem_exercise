@@ -1,7 +1,10 @@
 package org.contentModeration;
 
 import com.opencsv.CSVReader;
+import org.contentModeration.testUtils.TestUserStats;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.*;
 import java.util.HashMap;
@@ -11,7 +14,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class ContentModerationTest {
+class TestContentModeration {
     // PROGRAM EXECUTION
     TranslationService translationService = mockTranslationService();
     ScoringService scoringService = mockScoringService();
@@ -76,15 +79,21 @@ class ContentModerationTest {
         }
 
     }
-    @Test
-    void success_verifyModeratedCSV() throws Exception {
+    @ParameterizedTest
+    @CsvSource({
+            "1, 1, 1, 2",
+            "50, 50, 4, 50",
+            "100, 50, 10, 100",
+            "50, 100, 10, 19"
+    })
+    void success_verifyModeratedCSV(int numberOfUsers, int numberOfMessages, int numberOfWorkers, int numberOfThreads) throws Exception {
         boolean deleteFiles = true;
 
         // INPUT DATA GENERATION
-        int numberOfUsers = 100;
-        int numberOfMessages = 50;
+        //int numberOfUsers = 100;
+        //int numberOfMessages = 50;
 
-        Map<String,TestUserStats> users = createUsers(numberOfUsers);
+        Map<String, TestUserStats> users = createUsers(numberOfUsers);
 
         String inputTestFile = "./JUNIT_INPUT_"+System.currentTimeMillis() +"_.csv";
         String moderatedTestFile = "./JUNIT_OUTPUT_"+System.currentTimeMillis() +"_.csv";
@@ -92,8 +101,8 @@ class ContentModerationTest {
         generateCommentsAndWriteToFile(users,numberOfMessages,inputTestFile);
 
         //Execute program
-        final int numberOfWorkers = 4;
-        final int numberOfThreads = 10;
+        //final int numberOfWorkers = 4;
+        //final int numberOfThreads = 10;
         ContentModeration contentModeration = new ContentModeration(translationService,scoringService,numberOfWorkers,numberOfThreads,inputTestFile,moderatedTestFile);
         contentModeration.startThreadWorkers();
 
@@ -112,7 +121,7 @@ class ContentModerationTest {
             finput.delete();
         }
     }
-    private void verifyOutputFileHasExpectedResults(Map<String,TestUserStats> users, String moderatedTestFile){
+    private void verifyOutputFileHasExpectedResults(Map<String, TestUserStats> users, String moderatedTestFile){
         // RESULT VERIFICATION
         int totalLinesRead = 0;
         try (CSVReader reader = new CSVReader(new FileReader(moderatedTestFile))) {
@@ -158,8 +167,8 @@ class ContentModerationTest {
         return message.charAt(0);
     }
 
-    private Map<String,TestUserStats> createUsers(int numberOfUsers){
-        Map<String,TestUserStats> users = new HashMap<>();
+    private Map<String, TestUserStats> createUsers(int numberOfUsers){
+        Map<String, TestUserStats> users = new HashMap<>();
         for (int i = 0; i < numberOfUsers; i++) {
             String userName = getUserId(i);
             users.put(userName,new TestUserStats());
@@ -167,7 +176,7 @@ class ContentModerationTest {
         return users;
     }
 
-    private void generateCommentsAndWriteToFile(Map<String,TestUserStats> users, int numberOfMessages, String outPutFile) throws Exception{
+    private void generateCommentsAndWriteToFile(Map<String, TestUserStats> users, int numberOfMessages, String outPutFile) throws Exception{
         File f = new File(outPutFile);
         FileWriter fileWriter = new FileWriter(f);
 
