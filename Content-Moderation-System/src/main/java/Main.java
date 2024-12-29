@@ -22,10 +22,4 @@ public class Main {
         contentModeration.startThreadWorkers();
         System.out.println("Final Result is at: "+outputPath);
     }
-
-    /*
-        String one_million_lines_path = "./TEST_DATA.csv";
-        String path2 = "./src/main/resources/MOCK_DATA.csv";
-        String path3 = "./200000_TEST_DATA.csv";
-    */
 }
