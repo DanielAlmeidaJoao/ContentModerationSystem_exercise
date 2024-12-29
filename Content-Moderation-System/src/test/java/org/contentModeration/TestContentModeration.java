@@ -84,7 +84,7 @@ class TestContentModeration {
             "1, 1, 1, 2",
             "50, 50, 4, 50",
             "100, 50, 10, 100",
-            "50, 100, 10, 19"
+            "50, 100, 10, 11"
     })
     void success_verifyModeratedCSV(int numberOfUsers, int numberOfMessages, int numberOfWorkers, int numberOfThreads) throws Exception {
         boolean deleteFiles = true;

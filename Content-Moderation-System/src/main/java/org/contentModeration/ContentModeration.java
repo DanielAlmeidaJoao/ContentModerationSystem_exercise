@@ -33,6 +33,10 @@ public class ContentModeration {
         this.numberOfWorkers = numberOfWorkers;
         this.numberOfThreads = numberOfThreads;
 
+        if (numberOfThreads < (numberOfWorkers + 1)){
+            throw new RuntimeException("Number of threads must be greater than number of workers");
+        }
+
         this.inputPath = inputPath;
         this.outputPath = outputPath;
 
