@@ -9,7 +9,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ContentModeration {
     public static int MAX_NUMBER_THREADS_PER_PROCESS = 30499;
-    private Map<String,UserStats> commentsPerUser;
+    private Map<String, UserStats> commentsPerUser;
     private ReentrantReadWriteLock editUserStatsLock;
     private ReentrantReadWriteLock createUserLock;
 
@@ -23,8 +23,7 @@ public class ContentModeration {
     private int numberOfThreads;
 
 
-
-    public ContentModeration(TranslationService translationService, ScoringService scoringService, int numberOfWorkers, int numberOfThreads, String inputPath, String outputPath){
+    public ContentModeration(TranslationService translationService, ScoringService scoringService, int numberOfWorkers, int numberOfThreads, String inputPath, String outputPath) {
         commentsPerUser = new HashMap<>();
         editUserStatsLock = new ReentrantReadWriteLock();
         createUserLock = new ReentrantReadWriteLock();
@@ -35,7 +34,7 @@ public class ContentModeration {
         this.numberOfWorkers = numberOfWorkers;
         this.numberOfThreads = numberOfThreads;
 
-        if (numberOfThreads < (numberOfWorkers + 1)){
+        if (numberOfThreads < (numberOfWorkers + 1)) {
             throw new RuntimeException("Number of threads must be greater than number of workers");
         }
 
@@ -43,40 +42,17 @@ public class ContentModeration {
         this.outputPath = outputPath;
 
     }
-    public void startThreadWorkers() throws Exception{
-        long startTime = System.currentTimeMillis();
-        RandomAccessFile randomAccessFile = new RandomAccessFile(inputPath,"r");
-
-        long chunkSize = randomAccessFile.length() / numberOfWorkers;
-        final ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
-
-        BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
-        long nextStart = 0;
-        for (int i = 0; i < numberOfWorkers; i++) {
-            long currentStart = nextStart;
-            long endOffSet;
-            if (i == numberOfWorkers - 1){
-                endOffSet = randomAccessFile.length();
-            } else {
-                long pseudoEndOffSet = currentStart + chunkSize;
-                endOffSet = getBeginningOfNextLineOffset(pseudoEndOffSet,randomAccessFile);
-            }
-
-            nextStart = endOffSet;
-
-            executorService.submit(()->{
-                readFiles(executorService,currentStart,endOffSet, blockingQueue);
-            });
-        }
-        randomAccessFile.close();
+    public void waitForScoresToBeCalculated(BlockingQueue<Long> blockingQueue) throws Exception{
         int threadsFinished = 0;
-        while ( blockingQueue.take() > 0){
+        while (blockingQueue.take() > 0) {
             threadsFinished++;
-            if (threadsFinished == numberOfWorkers){
+            if (threadsFinished == numberOfWorkers) {
                 break;
             }
         }
+    }
 
+    public void writeFinalResultsToFile(long startTime) throws Exception{
         File output = new File(outputPath);
         try (FileWriter fileWriter = new FileWriter(output)) {
             for (Map.Entry<String, UserStats> stringUserStatsEntry : commentsPerUser.entrySet()) {
@@ -84,23 +60,55 @@ public class ContentModeration {
                 fileWriter.write(String.format("%s,%d,%f\n", stringUserStatsEntry.getKey(), stats.getTotalMessages(), stats.getAverageScore()));
             }
             long endTime = System.currentTimeMillis();
-            System.out.println("Finished! Elapsed: "+(endTime - startTime)+" ... "+commentsPerUser.size());
-            executorService.shutdownNow();
+            System.out.println("Finished! Elapsed: " + (endTime - startTime) + " ... " + commentsPerUser.size());
         }
     }
-    public void readFiles(final ExecutorService executorService,final long offset, final long endOffset, BlockingQueue<Long> waitingThreads) {
+    public void startThreadWorkers() throws Exception {
+        long startTime = System.currentTimeMillis();
 
-        try (RandomAccessFile reader = new RandomAccessFile(inputPath,"r")) {
+        final ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+        BlockingQueue<Long> blockingQueue = new LinkedBlockingQueue<>();
+
+        RandomAccessFile randomAccessFile = new RandomAccessFile(inputPath, "r");
+        long chunkSize = randomAccessFile.length() / numberOfWorkers;
+        long nextStart = 0;
+        for (int i = 0; i < numberOfWorkers; i++) {
+            long currentStart = nextStart;
+            long endOffSet;
+            if (i == numberOfWorkers - 1) {
+                endOffSet = randomAccessFile.length();
+            } else {
+                long pseudoEndOffSet = currentStart + chunkSize;
+                endOffSet = getBeginningOfNextLineOffset(pseudoEndOffSet, randomAccessFile);
+            }
+
+            nextStart = endOffSet;
+
+            executorService.submit(() -> {
+                readCsvAndCalculateScores(executorService, currentStart, endOffSet, blockingQueue);
+            });
+        }
+        randomAccessFile.close();
+
+        waitForScoresToBeCalculated(blockingQueue);
+        writeFinalResultsToFile(startTime);
+        executorService.shutdownNow();
+
+    }
+
+    public void readCsvAndCalculateScores(final ExecutorService executorService, final long offset, final long endOffset, BlockingQueue<Long> waitingThreads) {
+
+        try (RandomAccessFile reader = new RandomAccessFile(inputPath, "r")) {
             String line;
             reader.seek(offset);
             boolean processedAtLeastOne = false;
             final AtomicInteger totalProcessed = new AtomicInteger(0);
             final AtomicBoolean finishedProcessing = new AtomicBoolean(false);
             long localOffset = offset;
-            while (localOffset < endOffset && (line = reader.readLine() ) != null ) {
+            while (localOffset < endOffset && (line = reader.readLine()) != null) {
                 localOffset += line.length();
-                String [] columns = line.replaceFirst(",","|").split("\\|");
-                if (columns.length == 2){
+                String[] columns = line.replaceFirst(",", "|").split("\\|");
+                if (columns.length == 2) {
                     final String userName = columns[0];
                     final String comment = columns[1];
 
@@ -109,19 +117,19 @@ public class ContentModeration {
                     boolean unprocessedComment = userStats.messages.add(comment);
                     createUserLock.writeLock().unlock();
 
-                    if (unprocessedComment){
+                    if (unprocessedComment) {
                         processedAtLeastOne = true;
                         totalProcessed.incrementAndGet();
 
-                        executorService.execute(()->{
+                        executorService.execute(() -> {
                             String translatedText = translationService.TranslateToEnglish(comment);
 
-                            executorService.execute(()->{
+                            executorService.execute(() -> {
                                 float score = scoringService.WhatIsTheScore(translatedText);
                                 editUserStatsLock.writeLock().lock();
                                 userStats.addScore(score);
                                 editUserStatsLock.writeLock().unlock();
-                                if (totalProcessed.decrementAndGet() == 0 && finishedProcessing.get()){
+                                if (totalProcessed.decrementAndGet() == 0 && finishedProcessing.get()) {
                                     waitingThreads.add(Thread.currentThread().getId());
                                 }
                             });
@@ -131,7 +139,7 @@ public class ContentModeration {
             }
             finishedProcessing.set(true);
 
-            if (totalProcessed.get() == 0 && !processedAtLeastOne){
+            if (totalProcessed.get() == 0 && !processedAtLeastOne) {
                 waitingThreads.add(Thread.currentThread().getId());
             }
         } catch (Exception e) {
@@ -139,7 +147,7 @@ public class ContentModeration {
         }
     }
 
-    public static long getBeginningOfNextLineOffset(long offset, RandomAccessFile randomAccessFile) throws Exception{
+    public static long getBeginningOfNextLineOffset(long offset, RandomAccessFile randomAccessFile) throws Exception {
         long mark = randomAccessFile.getFilePointer();
         randomAccessFile.seek(offset);
         randomAccessFile.readLine();
