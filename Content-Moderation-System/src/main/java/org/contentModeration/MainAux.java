@@ -25,13 +25,13 @@ public class MainAux {
 
         for (int i = 0; i < size; i++) {
             String message = System.currentTimeMillis()+""+i;
-            fileWriter.write("user_name_"+i+","+encrypt(message)+"\n");
+            fileWriter.write("user_name_"+i+","+ encryptThenHex(message)+"\n");
         }
         fileWriter.flush();
         fileWriter.close();
     }
 
-    public static String encrypt(String message){
+    public static String encryptThenHex(String message){
         byte [] hashed = messageDigest.digest((message.getBytes(StandardCharsets.UTF_8)));
         return toHex(hashed);
     }

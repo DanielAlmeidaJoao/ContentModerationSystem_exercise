@@ -1,8 +1,5 @@
 package org.contentModeration;
 
-import com.opencsv.CSVParser;
-import com.opencsv.CSVReader;
-
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -40,6 +37,14 @@ public class ContentModeration {
         this.outputPath = outputPath;
 
     }
+    public static long getBeginningOfNextLineOffset(long offset, RandomAccessFile randomAccessFile) throws Exception{
+        long mark = randomAccessFile.getFilePointer();
+        randomAccessFile.seek(offset);
+        randomAccessFile.readLine();
+        long result = randomAccessFile.getFilePointer();
+        randomAccessFile.seek(mark);
+        return result;
+    }
     public void startThreadWorkers() throws Exception{
         long startTime = System.currentTimeMillis();
         RandomAccessFile randomAccessFile = new RandomAccessFile(inputPath,"r");
@@ -53,12 +58,10 @@ public class ContentModeration {
             long currentStart = nextStart;
             long endOffSet;
             if (i == numberOfWorkers - 1){
-                endOffSet =   randomAccessFile.length();
+                endOffSet = randomAccessFile.length();
             } else {
                 long pseudoEndOffSet = currentStart + chunkSize;
-                randomAccessFile.seek(pseudoEndOffSet);
-                randomAccessFile.readLine();
-                endOffSet = randomAccessFile.getFilePointer();
+                endOffSet = getBeginningOfNextLineOffset(pseudoEndOffSet,randomAccessFile);
             }
 
             nextStart = endOffSet;

@@ -1,7 +1,6 @@
 package org.contentModeration;
 
 import com.opencsv.CSVReader;
-import com.opencsv.CSVWriter;
 import org.junit.jupiter.api.Test;
 
 import java.io.*;
@@ -18,6 +17,66 @@ class ContentModerationTest {
     ScoringService scoringService = mockScoringService();
 
     @Test
+    void test_getBeginningOfNextLineOffset(){
+        try {
+            String line1 = MainAux.encryptThenHex("line1");
+            String line2 = MainAux.encryptThenHex("line2");
+            String line3 = MainAux.encryptThenHex("line3");
+
+            String file = "test_getBeginningOfNextLineOffset.txt";
+
+            FileWriter fileWriter = new FileWriter(file);
+            fileWriter.write(line1+"\n");
+            fileWriter.write(line2+"\n");
+            fileWriter.write(line3+"\n");
+            fileWriter.close();
+
+            RandomAccessFile randomAccessFile = new RandomAccessFile(file,"r");
+
+            for (int i = 0; i < line1.length(); i++) {
+                long currentOffset = randomAccessFile.getFilePointer();
+                long offset = ContentModeration.getBeginningOfNextLineOffset(i,randomAccessFile);
+
+                assert currentOffset == randomAccessFile.getFilePointer();
+
+                randomAccessFile.seek(offset);
+                String lineRead = randomAccessFile.readLine();
+
+                assert lineRead.equals(line2);
+            }
+
+            for (int i = line1.length()+1; i <(line1.length()+ line2.length()); i++) {
+                long currentOffset = randomAccessFile.getFilePointer();
+                long offset = ContentModeration.getBeginningOfNextLineOffset(i,randomAccessFile);
+                assert currentOffset == randomAccessFile.getFilePointer();
+
+                randomAccessFile.seek(offset);
+                String lineRead = randomAccessFile.readLine();
+
+                assert lineRead.equals(line3);
+            }
+            // 2 = the line breaks for line1 and line2
+            for (int i = (line1.length() + line2.length()+2); i < randomAccessFile.length(); i++) {
+                long currentOffset = randomAccessFile.getFilePointer();
+                long offset = ContentModeration.getBeginningOfNextLineOffset(i,randomAccessFile);
+                assert currentOffset == randomAccessFile.getFilePointer();
+
+                randomAccessFile.seek(offset);
+                String lineRead = randomAccessFile.readLine();
+
+                assert lineRead == null;
+            }
+
+            randomAccessFile.close();
+
+            deleteFiles(true,file);
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+    @Test
     void success_verifyModeratedCSV() throws Exception {
         boolean deleteFiles = true;
 
@@ -30,11 +89,11 @@ class ContentModerationTest {
         String inputTestFile = "./JUNIT_INPUT_"+System.currentTimeMillis() +"_.csv";
         String moderatedTestFile = "./JUNIT_OUTPUT_"+System.currentTimeMillis() +"_.csv";
 
-        generateComments(users,numberOfMessages,inputTestFile);
+        generateCommentsAndWriteToFile(users,numberOfMessages,inputTestFile);
 
+        //Execute program
         final int numberOfWorkers = 4;
         final int numberOfThreads = 10;
-
         ContentModeration contentModeration = new ContentModeration(translationService,scoringService,numberOfWorkers,numberOfThreads,inputTestFile,moderatedTestFile);
         contentModeration.startThreadWorkers();
 
@@ -42,46 +101,15 @@ class ContentModerationTest {
         verifyOutputFileHasExpectedResults(users,moderatedTestFile);
 
         //CLEAN UP
-        deleteFiles(deleteFiles,inputTestFile,moderatedTestFile);
+        deleteFiles(deleteFiles,inputTestFile);
+        deleteFiles(deleteFiles,moderatedTestFile);
+
     }
 
-    //@Test
-    void fail_one_user_with_wrong_number_of_message() throws Exception {
-        boolean deleteFiles = true;
-
-        // INPUT DATA GENERATION
-        int numberOfUsers = 10;
-        int numberOfMessages = 20;
-
-        Map<String,TestUserStats> users = createUsers(numberOfUsers);
-
-        //WILL FAIL BECAUSE OF THIS LINE!
-        users.get(getUserId(0)).addScore(9.72f);
-
-        String inputTestFile = "./JUNIT_INPUT_"+System.currentTimeMillis() +"_.csv";
-        String moderatedTestFile = "./JUNIT_OUTPUT_"+System.currentTimeMillis() +"_.csv";
-
-        generateComments(users,numberOfMessages,inputTestFile);
-
-        final int numberOfWorkers = 2;
-        final int numberOfThreads = 10;
-
-        ContentModeration contentModeration = new ContentModeration(translationService,scoringService,numberOfWorkers,numberOfThreads,inputTestFile,moderatedTestFile);
-        contentModeration.startThreadWorkers();
-
-        //VALIDATION
-        verifyOutputFileHasExpectedResults(users,moderatedTestFile);
-
-        //CLEAN UP
-        deleteFiles(deleteFiles,inputTestFile,moderatedTestFile);
-    }
-
-    private void deleteFiles(boolean deleteFiles, String inputTestFile, String moderatedTestFile){
+    private void deleteFiles(boolean deleteFiles, String inputTestFile){
         if (deleteFiles){
             File finput = new File(inputTestFile);
             finput.delete();
-            File fouput = new File(moderatedTestFile);
-            fouput.delete();
         }
     }
     private void verifyOutputFileHasExpectedResults(Map<String,TestUserStats> users, String moderatedTestFile){
@@ -139,14 +167,14 @@ class ContentModerationTest {
         return users;
     }
 
-    private void generateComments(Map<String,TestUserStats> users, int numberOfMessages, String outPutFile) throws Exception{
+    private void generateCommentsAndWriteToFile(Map<String,TestUserStats> users, int numberOfMessages, String outPutFile) throws Exception{
         File f = new File(outPutFile);
         FileWriter fileWriter = new FileWriter(f);
 
         //Generate messages
         for (int i = 0; i < numberOfMessages; i++) {
             String user = getUserId(i%users.size());
-            String message = MainAux.encrypt(System.currentTimeMillis()+"_"+i);
+            String message = MainAux.encryptThenHex(System.currentTimeMillis()+"_"+i);
             users.get(user).addScore(getTestScore(message));
 
             //Wriite to input file
