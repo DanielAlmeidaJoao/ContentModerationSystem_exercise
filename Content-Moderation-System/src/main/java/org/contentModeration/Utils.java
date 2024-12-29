@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-public class MainAux {
+public class Utils {
     public static final MessageDigest messageDigest;
 
     static {

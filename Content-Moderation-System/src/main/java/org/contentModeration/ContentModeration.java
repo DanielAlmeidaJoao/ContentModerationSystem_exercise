@@ -1,5 +1,7 @@
 package org.contentModeration;
 
+import com.opencsv.CSVParser;
+
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -12,6 +14,7 @@ public class ContentModeration {
     private Map<String, UserStats> commentsPerUser;
     private ReentrantReadWriteLock editUserStatsLock;
     private ReentrantReadWriteLock createUserLock;
+    private CSVParser csvParser;
 
     private ScoringService scoringService;
     private TranslationService translationService;
@@ -23,10 +26,12 @@ public class ContentModeration {
     private int numberOfThreads;
 
 
+
     public ContentModeration(TranslationService translationService, ScoringService scoringService, int numberOfWorkers, int numberOfThreads, String inputPath, String outputPath) {
         commentsPerUser = new HashMap<>();
         editUserStatsLock = new ReentrantReadWriteLock();
         createUserLock = new ReentrantReadWriteLock();
+        csvParser = new CSVParser();
 
         this.scoringService = scoringService;
         this.translationService = translationService;
@@ -42,27 +47,7 @@ public class ContentModeration {
         this.outputPath = outputPath;
 
     }
-    public void waitForScoresToBeCalculated(BlockingQueue<Long> blockingQueue) throws Exception{
-        int threadsFinished = 0;
-        while (blockingQueue.take() > 0) {
-            threadsFinished++;
-            if (threadsFinished == numberOfWorkers) {
-                break;
-            }
-        }
-    }
 
-    public void writeFinalResultsToFile(long startTime) throws Exception{
-        File output = new File(outputPath);
-        try (FileWriter fileWriter = new FileWriter(output)) {
-            for (Map.Entry<String, UserStats> stringUserStatsEntry : commentsPerUser.entrySet()) {
-                UserStats stats = stringUserStatsEntry.getValue();
-                fileWriter.write(String.format("%s,%d,%f\n", stringUserStatsEntry.getKey(), stats.getTotalMessages(), stats.getAverageScore()));
-            }
-            long endTime = System.currentTimeMillis();
-            System.out.println("Finished! Elapsed: " + (endTime - startTime) + " ... " + commentsPerUser.size());
-        }
-    }
     public void startThreadWorkers() throws Exception {
         long startTime = System.currentTimeMillis();
 
@@ -84,9 +69,9 @@ public class ContentModeration {
 
             nextStart = endOffSet;
 
-            executorService.submit(() -> {
-                readCsvAndCalculateScores(executorService, currentStart, endOffSet, blockingQueue);
-            });
+            executorService.submit(() ->
+                readCsvAndCalculateScores(executorService, currentStart, endOffSet, blockingQueue)
+            );
         }
         randomAccessFile.close();
 
@@ -96,7 +81,7 @@ public class ContentModeration {
 
     }
 
-    public void readCsvAndCalculateScores(final ExecutorService executorService, final long offset, final long endOffset, BlockingQueue<Long> waitingThreads) {
+    private void readCsvAndCalculateScores(final ExecutorService executorService, final long offset, final long endOffset, BlockingQueue<Long> waitingThreads) {
 
         try (RandomAccessFile reader = new RandomAccessFile(inputPath, "r")) {
             String line;
@@ -104,37 +89,36 @@ public class ContentModeration {
             boolean processedAtLeastOne = false;
             final AtomicInteger totalProcessed = new AtomicInteger(0);
             final AtomicBoolean finishedProcessing = new AtomicBoolean(false);
-            long localOffset = offset;
-            while (localOffset < endOffset && (line = reader.readLine()) != null) {
-                localOffset += line.length();
-                String[] columns = line.replaceFirst(",", "|").split("\\|");
-                if (columns.length == 2) {
-                    final String userName = columns[0];
-                    final String comment = columns[1];
 
-                    createUserLock.writeLock().lock();
-                    UserStats userStats = commentsPerUser.computeIfAbsent(userName, key -> new UserStats());
-                    boolean unprocessedComment = userStats.messages.add(comment);
-                    createUserLock.writeLock().unlock();
+            while (reader.getFilePointer() < endOffset && (line = reader.readLine()) != null) {
+                String[] columns = csvParser.parseLine(line);
+                final String userName = columns[0];
+                final String comment = columns[1];
 
-                    if (unprocessedComment) {
-                        processedAtLeastOne = true;
-                        totalProcessed.incrementAndGet();
+                createUserLock.writeLock().lock();
+                UserStats userStats = commentsPerUser.computeIfAbsent(userName, key -> new UserStats());
+                boolean unprocessedComment = userStats.messages.add(comment);
+                createUserLock.writeLock().unlock();
+
+                if (unprocessedComment) {
+                    processedAtLeastOne = true;
+                    totalProcessed.incrementAndGet();
+
+                    executorService.execute(() -> {
+                        String translatedText = translationService.TranslateToEnglish(comment);
 
                         executorService.execute(() -> {
-                            String translatedText = translationService.TranslateToEnglish(comment);
+                            float score = scoringService.WhatIsTheScore(translatedText);
 
-                            executorService.execute(() -> {
-                                float score = scoringService.WhatIsTheScore(translatedText);
-                                editUserStatsLock.writeLock().lock();
-                                userStats.addScore(score);
-                                editUserStatsLock.writeLock().unlock();
-                                if (totalProcessed.decrementAndGet() == 0 && finishedProcessing.get()) {
-                                    waitingThreads.add(Thread.currentThread().getId());
-                                }
-                            });
+                            editUserStatsLock.writeLock().lock();
+                            userStats.addScore(score);
+                            editUserStatsLock.writeLock().unlock();
+
+                            if (totalProcessed.decrementAndGet() == 0 && finishedProcessing.get()) {
+                                waitingThreads.add(Thread.currentThread().getId());
+                            }
                         });
-                    }
+                    });
                 }
             }
             finishedProcessing.set(true);
@@ -144,6 +128,29 @@ public class ContentModeration {
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private void waitForScoresToBeCalculated(BlockingQueue<Long> blockingQueue) throws Exception{
+        int threadsFinished = 0;
+        while (blockingQueue.take() > 0) {
+            threadsFinished++;
+            if (threadsFinished == numberOfWorkers) {
+                break;
+            }
+        }
+    }
+
+    private void writeFinalResultsToFile(long startTime) throws Exception{
+        File output = new File(outputPath);
+        try (FileWriter fileWriter = new FileWriter(output)) {
+            for (Map.Entry<String, UserStats> stringUserStatsEntry : commentsPerUser.entrySet()) {
+                UserStats stats = stringUserStatsEntry.getValue();
+                fileWriter.write(String.format("%s,%d,%f\n", stringUserStatsEntry.getKey(), stats.getTotalMessages(), stats.getAverageScore()));
+            }
+            long endTime = System.currentTimeMillis();
+            System.out.println("Total Lines Produced: "+ commentsPerUser.size());
+            System.out.println("Elapsed Time (ms): " + (endTime - startTime));
         }
     }
 

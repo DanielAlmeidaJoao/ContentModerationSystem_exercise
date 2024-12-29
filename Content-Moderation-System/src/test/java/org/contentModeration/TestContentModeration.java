@@ -22,9 +22,9 @@ class TestContentModeration {
     @Test
     void test_getBeginningOfNextLineOffset() {
         try {
-            String line1 = MainAux.encryptThenHex("line1");
-            String line2 = MainAux.encryptThenHex("line2");
-            String line3 = MainAux.encryptThenHex("line3");
+            String line1 = Utils.encryptThenHex("line1");
+            String line2 = Utils.encryptThenHex("line2");
+            String line3 = Utils.encryptThenHex("line3");
 
             String file = "test_getBeginningOfNextLineOffset.txt";
 
@@ -183,7 +183,7 @@ class TestContentModeration {
         //Generate messages
         for (int i = 0; i < numberOfMessages; i++) {
             String user = getUserId(i % users.size());
-            String message = MainAux.encryptThenHex(System.currentTimeMillis() + "_" + i);
+            String message = Utils.encryptThenHex(System.currentTimeMillis() + "_" + i);
             users.get(user).addScore(getTestScore(message));
 
             //Wriite to input file
