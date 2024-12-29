@@ -120,6 +120,8 @@ class TestContentModeration {
         deleteFiles(deleteFiles, moderatedTestFile);
     }
 
+
+    /* AUXILIARY METHODS */
     private void deleteFiles(boolean deleteFiles, String inputTestFile) {
         if (deleteFiles) {
             File finput = new File(inputTestFile);
