@@ -3,6 +3,8 @@ package org.contentModeration;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ContentModeration {
@@ -87,12 +89,13 @@ public class ContentModeration {
         }
     }
     public void readFiles(final ExecutorService executorService,final long offset, final long endOffset, BlockingQueue<Long> waitingThreads) {
-        BlockingQueue<Integer> localBlockingQueue = new LinkedBlockingQueue<>();
 
         try (RandomAccessFile reader = new RandomAccessFile(inputPath,"r")) {
             String line;
             reader.seek(offset);
-            int totalProcessed = 0;
+            boolean processedAtLeastOne = false;
+            final AtomicInteger totalProcessed = new AtomicInteger(0);
+            final AtomicBoolean finishedProcessing = new AtomicBoolean(false);
             long localOffset = offset;
             while (localOffset < endOffset && (line = reader.readLine() ) != null ) {
                 localOffset += line.length();
@@ -107,7 +110,8 @@ public class ContentModeration {
                     createUserLock.writeLock().unlock();
 
                     if (unprocessedComment){
-                        totalProcessed++;
+                        processedAtLeastOne = true;
+                        totalProcessed.incrementAndGet();
 
                         executorService.execute(()->{
                             String translatedText = translationService.TranslateToEnglish(comment);
@@ -117,23 +121,18 @@ public class ContentModeration {
                                 editUserStatsLock.writeLock().lock();
                                 userStats.addScore(score);
                                 editUserStatsLock.writeLock().unlock();
-                                localBlockingQueue.add(1);
+                                if (totalProcessed.decrementAndGet() == 0 && finishedProcessing.get()){
+                                    waitingThreads.add(Thread.currentThread().getId());
+                                }
                             });
                         });
                     }
                 }
             }
+            finishedProcessing.set(true);
 
-            if (totalProcessed == 0){
+            if (totalProcessed.get() == 0 && !processedAtLeastOne){
                 waitingThreads.add(Thread.currentThread().getId());
-            } else {
-                while (localBlockingQueue.take() > 0 ){
-                    totalProcessed--;
-                    if (totalProcessed==0){
-                        waitingThreads.add(Thread.currentThread().getId());
-                        break;
-                    }
-                }
             }
         } catch (Exception e) {
             e.printStackTrace();
