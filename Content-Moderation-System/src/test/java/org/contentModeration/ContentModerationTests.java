@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import java.io.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -106,7 +107,7 @@ class ContentModerationTests {
         String inputTestFile = "./JUNIT_INPUT_" + System.currentTimeMillis() + "_.csv";
         String moderatedTestFile = "./JUNIT_OUTPUT_" + System.currentTimeMillis() + "_.csv";
 
-        generateCommentsAndWriteToFile(users, numberOfMessages, inputTestFile);
+        generateCommentsAndWriteToFile(users, numberOfMessages, inputTestFile, true);
 
         //Execute program
         ContentModeration contentModeration = new ContentModeration(translationService, scoringService, numberOfWorkers, numberOfThreads, inputTestFile, moderatedTestFile);
@@ -176,7 +177,8 @@ class ContentModerationTests {
         return users;
     }
 
-    private void generateCommentsAndWriteToFile(Map<String, TestUserStats> users, int numberOfMessages, String outPutFile) throws Exception {
+    private void generateCommentsAndWriteToFile(Map<String, TestUserStats> users, int numberOfMessages, String outPutFile, boolean repeatSomeLines) throws Exception {
+        Random random = new Random();
         File f = new File(outPutFile);
         FileWriter fileWriter = new FileWriter(f);
 
@@ -188,6 +190,9 @@ class ContentModerationTests {
 
             //Wriite to input file
             fileWriter.write(user + "," + message + "\n");
+            if (repeatSomeLines && random.nextInt(4) == 3){
+                fileWriter.write(user + "," + message + "\n");
+            }
         }
         fileWriter.flush();
         fileWriter.close();
