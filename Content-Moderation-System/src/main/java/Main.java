@@ -9,7 +9,7 @@ public class Main {
         if (args.length > 0){
             numberOfWorkers = Integer.parseInt(args[0]);
         }
-        if (args.length > 0){
+        if (args.length > 1){
             numberOfThreads = Integer.parseInt(args[1]);
         }
         String path = "./TEST_DATA.csv";
