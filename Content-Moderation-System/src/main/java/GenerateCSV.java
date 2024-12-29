@@ -20,6 +20,7 @@ public class GenerateCSV {
             String message = System.currentTimeMillis()+""+i;
             fileWriter.write("user_name_"+i+","+ encryptThenHex(message)+"\n");
         }
+
         fileWriter.flush();
         fileWriter.close();
     }
